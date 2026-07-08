@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Nomina.Api/Nomina.Api.csproj" />
+  <Project Path="Nomina.Application/Nomina.Application.csproj" />
+  <Project Path="Nomina.Domain/Nomina.Domain.csproj" />
+  <Project Path="Nomina.Infrastructure/Nomina.Infrastructure.csproj" />
+</Solution>
