@@ -235,7 +235,7 @@ export default function EmpleadosPage() {
         </button>
       </header>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 justify-between">
         <input
           type="search"
           value={query}
@@ -243,9 +243,11 @@ export default function EmpleadosPage() {
           placeholder="Buscar por cédula, nombre, departamento…"
           className="flex-1 max-w-md rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-600"
         />
-        <EstadoFilterControl value={estadoFilter} onChange={setEstadoFilter} disabled={loading} />
-        <div className="text-xs text-slate-500">
-          {loading ? <Spinner size="sm" label="Cargando…" /> : `${filtered.length} de ${rows.length}`}
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-slate-500">
+            {loading ? <Spinner size="sm" label="Cargando…" /> : `${filtered.length} de ${rows.length}`}
+          </div>
+          <EstadoFilterControl value={estadoFilter} onChange={setEstadoFilter} disabled={loading} />
         </div>
       </div>
 

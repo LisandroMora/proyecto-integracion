@@ -9,6 +9,7 @@ Sistema de nómina fullstack que integra un backend propietario en C#/SQL Server
 A00115107 - Isaías De León
 A00116414 - Lisandro Mora
 A00114812 - Danae de Jesus
+A00115306 - David Abreu
 
 ## Stack
 
