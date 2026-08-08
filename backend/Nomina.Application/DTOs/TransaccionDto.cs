@@ -12,4 +12,8 @@ public record TransaccionDto(
     string ConceptoNombre,
     DateTime Fecha,
     decimal Monto,
-    EstadoRegistro Estado);
+    EstadoRegistro Estado,
+    /// <summary>Asiento local que la contabilizó; null si aún está pendiente de cierre.</summary>
+    int? AsientoContableId,
+    /// <summary>Número que asignó Contabilidad al asiento correspondiente.</summary>
+    int? NumeroAsiento);

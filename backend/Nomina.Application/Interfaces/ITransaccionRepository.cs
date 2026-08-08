@@ -5,7 +5,7 @@ namespace Nomina.Application.Interfaces;
 
 public interface ITransaccionRepository
 {
-    Task<List<Transaccion>> ListAsync(EstadoFilter filter = EstadoFilter.Activos, CancellationToken ct = default);
+    Task<List<Transaccion>> ListAsync(TransaccionQuery query, CancellationToken ct = default);
     Task<Transaccion?> GetByIdAsync(int id, CancellationToken ct = default);
     Task AddAsync(Transaccion entity, CancellationToken ct = default);
     Task<bool> EmpleadoExistsAsync(int empleadoId, CancellationToken ct = default);

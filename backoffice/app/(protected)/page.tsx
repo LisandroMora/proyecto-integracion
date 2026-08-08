@@ -104,6 +104,14 @@ export default function Home() {
           <div className="font-medium text-slate-100">Tipos de Deducción</div>
           <div className="text-sm text-slate-500 mt-1">Catálogo de conceptos que restan en la nómina.</div>
         </Link>
+
+        <Link
+          href="/cierre-contable"
+          className="rounded-md border border-slate-800 bg-slate-900 p-4 hover:border-slate-600 hover:bg-slate-900/70 transition"
+        >
+          <div className="font-medium text-slate-100">Cierre Contable</div>
+          <div className="text-sm text-slate-500 mt-1">Envío del asiento del período a Contabilidad.</div>
+        </Link>
       </div>
     </div>
   );

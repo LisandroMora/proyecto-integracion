@@ -11,21 +11,48 @@ public class TransaccionRepository : ITransaccionRepository
     private readonly NominaDbContext _db;
     public TransaccionRepository(NominaDbContext db) => _db = db;
 
-    public Task<List<Transaccion>> ListAsync(EstadoFilter filter = EstadoFilter.Activos, CancellationToken ct = default)
+    public Task<List<Transaccion>> ListAsync(TransaccionQuery query, CancellationToken ct = default)
     {
-        IQueryable<Transaccion> q = _db.Transacciones.Include(t => t.Empleado);
-        q = filter switch
+        IQueryable<Transaccion> q = _db.Transacciones.Include(t => t.Empleado)
+            .Include(t => t.AsientoContable);
+
+        q = query.Estado switch
         {
             EstadoFilter.Activos => q.Where(t => t.Estado == EstadoRegistro.Activo),
             EstadoFilter.Inactivos => q.Where(t => t.Estado == EstadoRegistro.Inactivo),
             _ => q
         };
+
+        if (query.EmpleadoId is int empleadoId)
+            q = q.Where(t => t.EmpleadoId == empleadoId);
+
+        if (query.TipoTransaccion is TipoTransaccion tipo)
+            q = q.Where(t => t.TipoTransaccion == tipo);
+
+        if (query.ConceptoId is int conceptoId)
+            q = q.Where(t => t.ConceptoId == conceptoId);
+
+        if (query.FechaDesde is DateTime desde)
+        {
+            var inicio = desde.Date;
+            q = q.Where(t => t.Fecha >= inicio);
+        }
+
+        if (query.FechaHasta is DateTime hasta)
+        {
+            // Exclusivo sobre el día siguiente: cubre el día completo de FechaHasta
+            // aunque la transacción tenga componente de hora.
+            var limite = hasta.Date.AddDays(1);
+            q = q.Where(t => t.Fecha < limite);
+        }
+
         return q.OrderByDescending(t => t.Fecha).ThenByDescending(t => t.Id).ToListAsync(ct);
     }
 
     public Task<Transaccion?> GetByIdAsync(int id, CancellationToken ct = default) =>
         _db.Transacciones
             .Include(t => t.Empleado)
+            .Include(t => t.AsientoContable)
             .FirstOrDefaultAsync(t => t.Id == id, ct);
 
     public async Task AddAsync(Transaccion entity, CancellationToken ct = default)

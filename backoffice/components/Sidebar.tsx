@@ -10,6 +10,7 @@ const links = [
   { href: "/transacciones", label: "Transacciones" },
   { href: "/tipos-ingreso", label: "Tipos de Ingreso" },
   { href: "/tipos-deduccion", label: "Tipos de Deducción" },
+  { href: "/cierre-contable", label: "Cierre Contable" },
 ];
 
 export function Sidebar() {

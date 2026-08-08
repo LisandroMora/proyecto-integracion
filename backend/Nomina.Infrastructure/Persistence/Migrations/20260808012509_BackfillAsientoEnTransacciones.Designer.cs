@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nomina.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Nomina.Infrastructure.Persistence;
 namespace Nomina.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(NominaDbContext))]
-    partial class NominaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260808012509_BackfillAsientoEnTransacciones")]
+    partial class BackfillAsientoEnTransacciones
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

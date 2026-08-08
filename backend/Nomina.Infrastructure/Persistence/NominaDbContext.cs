@@ -16,6 +16,8 @@ public class NominaDbContext : DbContext
     public DbSet<NominaEntity> Nominas => Set<NominaEntity>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<Rol> Roles => Set<Rol>();
+    public DbSet<AsientoContable> AsientosContables => Set<AsientoContable>();
+    public DbSet<AsientoContableDetalle> AsientosContablesDetalle => Set<AsientoContableDetalle>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

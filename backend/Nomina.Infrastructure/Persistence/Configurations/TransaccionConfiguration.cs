@@ -20,6 +20,14 @@ public class TransaccionConfiguration : IEntityTypeConfiguration<Transaccion>
             .HasForeignKey(x => x.EmpleadoId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(x => x.AsientoContable)
+            .WithMany(a => a.Transacciones)
+            .HasForeignKey(x => x.AsientoContableId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(x => new { x.TipoTransaccion, x.ConceptoId });
+
+        // El cierre busca repetidamente las transacciones aún no contabilizadas.
+        builder.HasIndex(x => new { x.Fecha, x.AsientoContableId });
     }
 }

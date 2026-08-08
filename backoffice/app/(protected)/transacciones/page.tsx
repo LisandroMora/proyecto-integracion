@@ -26,6 +26,8 @@ type TransaccionRead = {
   fecha: string;
   monto: number;
   estado: EstadoRegistro;
+  asientoContableId: number | null;
+  numeroAsiento: number | null;
 };
 
 type TransaccionCreate = {
@@ -87,6 +89,23 @@ const emptyForm: FormState = {
   estado: 1,
 };
 
+/** Criterios de la consulta; se envían al API. "" significa "sin filtrar". */
+type Criterios = {
+  empleadoId: number | "";
+  tipoTransaccion: TipoTransaccion | "";
+  conceptoId: number | "";
+  fechaDesde: string;
+  fechaHasta: string;
+};
+
+const emptyCriterios: Criterios = {
+  empleadoId: "",
+  tipoTransaccion: "",
+  conceptoId: "",
+  fechaDesde: "",
+  fechaHasta: "",
+};
+
 export default function TransaccionesPage() {
   const toast = useToast();
   const [rows, setRows] = useState<TransaccionRead[]>([]);
@@ -96,6 +115,7 @@ export default function TransaccionesPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("activos");
+  const [criterios, setCriterios] = useState<Criterios>(emptyCriterios);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -103,31 +123,73 @@ export default function TransaccionesPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const rangoInvalido =
+    criterios.fechaDesde !== "" &&
+    criterios.fechaHasta !== "" &&
+    criterios.fechaDesde > criterios.fechaHasta;
+
+  // Los catálogos alimentan tanto los filtros como el formulario; no cambian
+  // desde esta pantalla, así que se cargan una sola vez.
+  const loadCatalogos = useCallback(async () => {
     try {
-      const [tx, emp, ti, td] = await Promise.all([
-        transaccionesResource.list({ estado: estadoFilter }),
-        empleadosResource.list(),
-        tiposIngresoResource.list(),
-        tiposDeduccionResource.list(),
+      const [emp, ti, td] = await Promise.all([
+        empleadosResource.list({ estado: "todos" }),
+        tiposIngresoResource.list({ estado: "todos" }),
+        tiposDeduccionResource.list({ estado: "todos" }),
       ]);
-      setRows(tx);
       setEmpleados(emp);
       setIngresos(ti);
       setDeducciones(td);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudieron cargar los catálogos.");
+    }
+  }, [toast]);
+
+  const load = useCallback(async () => {
+    if (rangoInvalido) return;
+    setLoading(true);
+    try {
+      // Los valores "" se omiten del query string (ver buildQueryString).
+      const tx = await transaccionesResource.list({
+        estado: estadoFilter,
+        empleadoId: criterios.empleadoId,
+        tipoTransaccion: criterios.tipoTransaccion,
+        conceptoId: criterios.conceptoId,
+        fechaDesde: criterios.fechaDesde,
+        fechaHasta: criterios.fechaHasta,
+      });
+      setRows(tx);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo cargar la lista.");
     } finally {
       setLoading(false);
     }
-  }, [estadoFilter, toast]);
+  }, [estadoFilter, criterios, rangoInvalido, toast]);
+
+  useEffect(() => {
+    void loadCatalogos();
+  }, [loadCatalogos]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const empleadosActivos = useMemo(() => empleados.filter((e) => e.estado === 1), [empleados]);
+
+  // En los filtros sí se listan los inactivos: pueden existir transacciones
+  // históricas de un empleado o concepto que luego fue dado de baja.
+  const conceptosFiltro = useMemo(() => {
+    if (criterios.tipoTransaccion === "") return [];
+    return criterios.tipoTransaccion === 1 ? ingresos : deducciones;
+  }, [criterios.tipoTransaccion, ingresos, deducciones]);
+
+  const hayCriterios =
+    criterios.empleadoId !== "" ||
+    criterios.tipoTransaccion !== "" ||
+    criterios.conceptoId !== "" ||
+    criterios.fechaDesde !== "" ||
+    criterios.fechaHasta !== "";
+
   const conceptosActivos = useMemo(
     () => (form.tipoTransaccion === 1 ? ingresos : deducciones).filter((c) => c.estado === 1),
     [form.tipoTransaccion, ingresos, deducciones]
@@ -257,6 +319,20 @@ export default function TransaccionesPage() {
     );
   }, [rows, query]);
 
+  const totales = useMemo(() => {
+    let ingresosTotal = 0;
+    let deduccionesTotal = 0;
+    for (const r of filtered) {
+      if (r.tipoTransaccion === 1) ingresosTotal += r.monto;
+      else deduccionesTotal += r.monto;
+    }
+    return {
+      ingresos: ingresosTotal,
+      deducciones: deduccionesTotal,
+      neto: ingresosTotal - deduccionesTotal,
+    };
+  }, [filtered]);
+
   const columns: Column<TransaccionRead>[] = [
     {
       header: "Fecha",
@@ -304,6 +380,21 @@ export default function TransaccionesPage() {
       className: "w-40 text-right",
     },
     { header: "Estado", cell: (r) => <EstadoBadge estado={r.estado} />, className: "w-24" },
+    {
+      header: "Contabilidad",
+      cell: (r) =>
+        r.asientoContableId === null ? (
+          <span className="text-xs text-slate-500">Pendiente</span>
+        ) : (
+          <span
+            className="inline-flex items-center rounded-full bg-sky-950/60 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-inset ring-sky-900"
+            title={`Contabilizada en el asiento #${r.numeroAsiento ?? r.asientoContableId}`}
+          >
+            Asiento #{r.numeroAsiento ?? r.asientoContableId}
+          </span>
+        ),
+      className: "w-32",
+    },
   ];
 
   const noHayEmpleadosActivos = !loading && empleadosActivos.length === 0;
@@ -340,6 +431,137 @@ export default function TransaccionesPage() {
         </div>
       )}
 
+      <section className="rounded-md border border-slate-800 bg-slate-900 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium text-slate-300">Consulta por criterios</h2>
+          {hayCriterios && (
+            <button
+              type="button"
+              onClick={() => setCriterios(emptyCriterios)}
+              className="rounded border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div>
+            <label
+              htmlFor="filtro-empleado"
+              className="block text-xs font-medium mb-1 text-slate-400"
+            >
+              Empleado
+            </label>
+            <select
+              id="filtro-empleado"
+              value={criterios.empleadoId}
+              onChange={(e) =>
+                setCriterios({
+                  ...criterios,
+                  empleadoId: e.target.value ? Number(e.target.value) : "",
+                })
+              }
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-600"
+            >
+              <option value="">Todos</option>
+              {empleados.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.nombre} · {formatCedula(emp.cedula)}
+                  {emp.estado === 0 ? " (inactivo)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="filtro-tipo" className="block text-xs font-medium mb-1 text-slate-400">
+              Tipo
+            </label>
+            <select
+              id="filtro-tipo"
+              value={criterios.tipoTransaccion}
+              onChange={(e) =>
+                setCriterios({
+                  ...criterios,
+                  tipoTransaccion: e.target.value ? (Number(e.target.value) as TipoTransaccion) : "",
+                  // El id de concepto pertenece a un catálogo distinto según el tipo.
+                  conceptoId: "",
+                })
+              }
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-600"
+            >
+              <option value="">Todos</option>
+              <option value={1}>Ingreso</option>
+              <option value={2}>Deducción</option>
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="filtro-concepto"
+              className="block text-xs font-medium mb-1 text-slate-400"
+            >
+              Concepto
+            </label>
+            <select
+              id="filtro-concepto"
+              value={criterios.conceptoId}
+              disabled={criterios.tipoTransaccion === ""}
+              onChange={(e) =>
+                setCriterios({
+                  ...criterios,
+                  conceptoId: e.target.value ? Number(e.target.value) : "",
+                })
+              }
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-600 disabled:bg-slate-950 disabled:text-slate-500 disabled:cursor-not-allowed"
+            >
+              <option value="">{criterios.tipoTransaccion === "" ? "Elija un tipo" : "Todos"}</option>
+              {conceptosFiltro.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                  {c.estado === 0 ? " (inactivo)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="filtro-desde" className="block text-xs font-medium mb-1 text-slate-400">
+              Desde
+            </label>
+            <input
+              id="filtro-desde"
+              type="date"
+              value={criterios.fechaDesde}
+              max={criterios.fechaHasta || undefined}
+              onChange={(e) => setCriterios({ ...criterios, fechaDesde: e.target.value })}
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-600"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="filtro-hasta" className="block text-xs font-medium mb-1 text-slate-400">
+              Hasta
+            </label>
+            <input
+              id="filtro-hasta"
+              type="date"
+              value={criterios.fechaHasta}
+              min={criterios.fechaDesde || undefined}
+              onChange={(e) => setCriterios({ ...criterios, fechaHasta: e.target.value })}
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-600"
+            />
+          </div>
+        </div>
+
+        {rangoInvalido && (
+          <div className="text-xs text-rose-400">
+            La fecha inicial no puede ser posterior a la fecha final.
+          </div>
+        )}
+      </section>
+
       <div className="flex items-center gap-3 justify-between">
         <input
           type="search"
@@ -360,30 +582,81 @@ export default function TransaccionesPage() {
         columns={columns}
         rows={filtered}
         rowKey={(r) => r.id}
-        emptyLabel={loading ? <Spinner label="Cargando…" /> : "Sin transacciones"}
-        actions={(row) => (
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => openEdit(row)}
-              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-            >
-              Editar
-            </button>
-            <button
-              onClick={() => void toggleEstado(row)}
+        emptyLabel={
+          loading ? (
+            <Spinner label="Cargando…" />
+          ) : hayCriterios || query.trim() !== "" ? (
+            "Ninguna transacción coincide con los criterios de la consulta."
+          ) : (
+            "Sin transacciones"
+          )
+        }
+        actions={(row) => {
+          // Una transacción ya contabilizada es inmutable: se corrige con un ajuste.
+          const bloqueada = row.asientoContableId !== null;
+          const motivo = bloqueada
+            ? `Ya contabilizada en el asiento #${row.numeroAsiento ?? row.asientoContableId}. ` +
+              "Registre una transacción de ajuste."
+            : undefined;
+
+          return (
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => openEdit(row)}
+                disabled={bloqueada}
+                title={motivo}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:border-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed disabled:hover:bg-slate-900 transition-colors"
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => void toggleEstado(row)}
+                disabled={bloqueada}
+                title={motivo}
+                className={
+                  "rounded px-2 py-1 text-xs border disabled:cursor-not-allowed " +
+                  (bloqueada
+                    ? "border-slate-800 bg-slate-900 text-slate-600"
+                    : row.estado === 1
+                      ? "border-rose-900 bg-rose-950/60 text-rose-300 hover:bg-rose-950 hover:text-rose-200"
+                      : "border-emerald-900 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-950 hover:text-emerald-200") +
+                  " transition-colors"
+                }
+              >
+                {row.estado === 1 ? "Anular" : "Reactivar"}
+              </button>
+            </div>
+          );
+        }}
+      />
+
+      {filtered.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-md border border-slate-800 bg-slate-900 px-4 py-3">
+            <div className="text-xs text-slate-400">Total ingresos</div>
+            <div className="mt-1 text-lg font-semibold tabular-nums text-emerald-300">
+              {currency.format(totales.ingresos)}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-800 bg-slate-900 px-4 py-3">
+            <div className="text-xs text-slate-400">Total deducciones</div>
+            <div className="mt-1 text-lg font-semibold tabular-nums text-rose-300">
+              {currency.format(totales.deducciones)}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-800 bg-slate-900 px-4 py-3">
+            <div className="text-xs text-slate-400">Neto</div>
+            <div
               className={
-                "rounded px-2 py-1 text-xs border " +
-                (row.estado === 1
-                  ? "border-rose-900 bg-rose-950/60 text-rose-300 hover:bg-rose-950 hover:text-rose-200"
-                  : "border-emerald-900 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-950 hover:text-emerald-200") +
-                " transition-colors"
+                "mt-1 text-lg font-semibold tabular-nums " +
+                (totales.neto < 0 ? "text-rose-300" : "text-slate-100")
               }
             >
-              {row.estado === 1 ? "Anular" : "Reactivar"}
-            </button>
+              {currency.format(totales.neto)}
+            </div>
           </div>
-        )}
-      />
+        </div>
+      )}
 
       <Modal
         open={modalOpen}

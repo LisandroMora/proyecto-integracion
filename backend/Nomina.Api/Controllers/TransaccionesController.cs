@@ -14,11 +14,15 @@ public class TransaccionesController : ControllerBase
     private readonly ITransaccionService _service;
     public TransaccionesController(ITransaccionService service) => _service = service;
 
+    /// <summary>
+    /// Consulta por criterios: estado, empleado, tipo de transacción, concepto y
+    /// rango de fechas. Todos los criterios son opcionales y se combinan.
+    /// </summary>
     [HttpGet]
     public Task<List<TransaccionDto>> List(
-        [FromQuery] EstadoFilter estado = EstadoFilter.Activos,
+        [FromQuery] TransaccionQuery query,
         CancellationToken ct = default) =>
-        _service.ListAsync(estado, ct);
+        _service.ListAsync(query, ct);
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<TransaccionDto>> GetById(int id, CancellationToken ct)

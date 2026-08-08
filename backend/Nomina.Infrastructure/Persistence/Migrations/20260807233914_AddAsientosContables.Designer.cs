@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nomina.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Nomina.Infrastructure.Persistence;
 namespace Nomina.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(NominaDbContext))]
-    partial class NominaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807233914_AddAsientosContables")]
+    partial class AddAsientosContables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -79,7 +82,11 @@ namespace Nomina.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Anio", "Mes", "TipoTransaccion", "ConceptoId");
+                    b.HasIndex("Anio", "Mes");
+
+                    b.HasIndex("Anio", "Mes", "TipoTransaccion", "ConceptoId")
+                        .IsUnique()
+                        .HasFilter("[Estado] = 1");
 
                     b.ToTable("AsientosContables", (string)null);
                 });
@@ -285,9 +292,6 @@ namespace Nomina.Infrastructure.Persistence.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("AsientoContableId")
-                        .HasColumnType("int");
-
                     b.Property<int>("ConceptoId")
                         .HasColumnType("int");
 
@@ -308,11 +312,7 @@ namespace Nomina.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AsientoContableId");
-
                     b.HasIndex("EmpleadoId");
-
-                    b.HasIndex("Fecha", "AsientoContableId");
 
                     b.HasIndex("TipoTransaccion", "ConceptoId");
 
@@ -377,18 +377,11 @@ namespace Nomina.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Nomina.Domain.Entities.Transaccion", b =>
                 {
-                    b.HasOne("Nomina.Domain.Entities.AsientoContable", "AsientoContable")
-                        .WithMany("Transacciones")
-                        .HasForeignKey("AsientoContableId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Nomina.Domain.Entities.Empleado", "Empleado")
                         .WithMany("Transacciones")
                         .HasForeignKey("EmpleadoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("AsientoContable");
 
                     b.Navigation("Empleado");
                 });
@@ -407,8 +400,6 @@ namespace Nomina.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Nomina.Domain.Entities.AsientoContable", b =>
                 {
                     b.Navigation("Detalles");
-
-                    b.Navigation("Transacciones");
                 });
 
             modelBuilder.Entity("Nomina.Domain.Entities.Empleado", b =>

@@ -13,9 +13,11 @@ public class TransaccionService : ITransaccionService
 
     public TransaccionService(ITransaccionRepository repo) => _repo = repo;
 
-    public async Task<List<TransaccionDto>> ListAsync(EstadoFilter filter = EstadoFilter.Activos, CancellationToken ct = default)
+    public async Task<List<TransaccionDto>> ListAsync(TransaccionQuery query, CancellationToken ct = default)
     {
-        var items = await _repo.ListAsync(filter, ct);
+        ValidateQuery(query);
+
+        var items = await _repo.ListAsync(query, ct);
         var ingresos = await _repo.GetTiposIngresoNamesAsync(ct);
         var deducciones = await _repo.GetTiposDeduccionNamesAsync(ct);
         return items.Select(t => Map(t, ingresos, deducciones)).ToList();
@@ -57,6 +59,7 @@ public class TransaccionService : ITransaccionService
         var entity = await _repo.GetByIdAsync(id, ct);
         if (entity is null) return null;
 
+        ValidarNoContabilizada(entity, "modificar");
         await ValidateAsync(dto.EmpleadoId, dto.TipoTransaccion, dto.ConceptoId, ct);
 
         entity.EmpleadoId = dto.EmpleadoId;
@@ -78,9 +81,43 @@ public class TransaccionService : ITransaccionService
         var entity = await _repo.GetByIdAsync(id, ct);
         if (entity is null) return false;
 
+        ValidarNoContabilizada(entity, "anular");
         entity.Estado = EstadoRegistro.Inactivo;
         await _repo.SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <summary>
+    /// Una transacción ya enviada a Contabilidad no se toca: cambiarla dejaría el
+    /// asiento registrado allá sin respaldo acá. La corrección se hace registrando
+    /// una transacción de ajuste, que entra en el siguiente cierre.
+    /// </summary>
+    private static void ValidarNoContabilizada(Transaccion entity, string accion)
+    {
+        if (entity.AsientoContableId is null) return;
+
+        throw new DomainValidationException(
+            $"No se puede {accion} una transacción ya contabilizada " +
+            $"(asiento #{entity.AsientoContableId}). Registre una transacción de ajuste.");
+    }
+
+    private static void ValidateQuery(TransaccionQuery query)
+    {
+        if (query.FechaDesde is DateTime desde &&
+            query.FechaHasta is DateTime hasta &&
+            desde.Date > hasta.Date)
+        {
+            throw new DomainValidationException(
+                "La fecha inicial no puede ser posterior a la fecha final.");
+        }
+
+        // Los ids de concepto se repiten entre ambos catálogos, así que filtrar por
+        // concepto sin indicar el tipo devolvería registros de ambos.
+        if (query.ConceptoId is not null && query.TipoTransaccion is null)
+        {
+            throw new DomainValidationException(
+                "Para filtrar por concepto debe indicar también el tipo de transacción.");
+        }
     }
 
     private async Task ValidateAsync(int empleadoId, TipoTransaccion tipo, int conceptoId, CancellationToken ct)
@@ -128,5 +165,7 @@ public class TransaccionService : ITransaccionService
         conceptoNombre,
         t.Fecha,
         t.Monto,
-        t.Estado);
+        t.Estado,
+        t.AsientoContableId,
+        t.AsientoContable?.NumeroAsiento);
 }
