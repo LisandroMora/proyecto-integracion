@@ -17,7 +17,19 @@ public static class DependencyInjection
 
         services.AddDbContext<NominaDbContext>(options =>
             options.UseSqlServer(connectionString, sql =>
-                sql.MigrationsAssembly(typeof(NominaDbContext).Assembly.FullName)));
+            {
+                sql.MigrationsAssembly(typeof(NominaDbContext).Assembly.FullName);
+
+                // Azure SQL en plan gratuito pausa la base tras una hora sin uso y
+                // tarda en despertar: la primera consulta después de la pausa falla
+                // con un error transitorio si nadie la reintenta.
+                sql.EnableRetryOnFailure(
+                    maxRetryCount: 6,
+                    maxRetryDelay: TimeSpan.FromSeconds(15),
+                    errorNumbersToAdd: null);
+
+                sql.CommandTimeout(60);
+            }));
 
         services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
         services.Configure<ContabilidadSettings>(configuration.GetSection("Contabilidad"));

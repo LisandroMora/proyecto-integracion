@@ -11,8 +11,13 @@ public class ContabilidadSettings
     /// Su servicio corre en un plan gratuito: la primera petición tras un rato de
     /// inactividad ha llegado a tardar más de 100 s, por encima del timeout por
     /// defecto de HttpClient.
+    /// <para>
+    /// El techo es el límite de petición de App Service (~230 s). El costo de
+    /// despertar su servidor se paga una sola vez, al consultar el catálogo de
+    /// cuentas; los envíos posteriores del mismo cierre ya lo encuentran caliente.
+    /// </para>
     /// </summary>
-    public int TimeoutSegundos { get; set; } = 180;
+    public int TimeoutSegundos { get; set; } = 90;
 
     public int ReintentosEnvio { get; set; } = 2;
 
