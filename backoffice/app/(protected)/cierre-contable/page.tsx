@@ -192,7 +192,7 @@ export default function CierreContablePage() {
       cell: (r) => <span className="font-medium tabular-nums">{currency.format(r.monto)}</span>,
       className: "w-40 text-right",
     },
-    {
+    /* {
       header: "Nota",
       cell: (r) => (
         <div className="space-y-1">
@@ -210,7 +210,7 @@ export default function CierreContablePage() {
         </div>
       ),
       className: "w-64",
-    },
+    }, */
   ];
 
   const historialColumns: Column<Asiento>[] = [
@@ -324,7 +324,7 @@ export default function CierreContablePage() {
         </div>
       </section>
 
-      {preview.length > 0 && (
+      {/* {preview.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="rounded-md border border-slate-800 bg-slate-900 px-4 py-3">
             <div className="text-xs text-slate-400">Ingresos por contabilizar</div>
@@ -350,11 +350,11 @@ export default function CierreContablePage() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium text-slate-300">
-          Asientos a generar — {MESES[mes - 1]} {anio}
+          Asientos a generar | {MESES[mes - 1]} {anio}
         </h2>
         <DataTable
           columns={previewColumns}
