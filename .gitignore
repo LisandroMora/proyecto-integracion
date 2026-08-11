@@ -1,3 +1,6 @@
 # Contexto y configuración local de Claude Code — no forma parte del proyecto.
 CLAUDE.md
 .claude/
+
+# Documentación operativa interna.
+docs/

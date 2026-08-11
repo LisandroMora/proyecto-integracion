@@ -1,0 +1,40 @@
+name: Desplegar API en Azure App Service
+
+# El asistente de Azure genera un workflow que compila desde la raíz del
+# repositorio, y aquí la solución vive en backend/. Por eso se define a mano.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+env:
+  # Cambiar por el nombre real del Web App creado en Azure.
+  AZURE_WEBAPP_NAME: app-nomina-api
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Publicar
+        run: >
+          dotnet publish backend/Nomina.Api/Nomina.Api.csproj
+          -c Release
+          -o ${{ github.workspace }}/publish
+
+      - name: Desplegar
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ${{ github.workspace }}/publish

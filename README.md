@@ -22,3 +22,13 @@ A00115306 - David Abreu
 **Backoffice (open source)**
 - Next.js 15 (App Router) + React + TypeScript
 - Tailwind CSS
+
+## Despliegue
+
+El servidor de prueba corre en Azure sobre planes gratuitos: Azure SQL Database (free
+offer) para la base, App Service Linux F1 para la API y Static Web Apps para el backoffice.
+
+La API se publica con el workflow [`deploy-api.yml`](.github/workflows/deploy-api.yml), que
+está escrito a mano porque el asistente de Azure compila desde la raíz del repositorio y
+aquí la solución vive en `backend/`. Requiere el secreto `AZURE_WEBAPP_PUBLISH_PROFILE`. El
+backoffice se publica con el workflow que genera el propio Static Web App.
