@@ -1,3 +1,4 @@
+using Nomina.Application.Common;
 using Nomina.Domain.Entities;
 
 namespace Nomina.Application.Interfaces;
@@ -16,7 +17,8 @@ public interface IAsientoContableRepository
     Task<List<Transaccion>> GetTransaccionesByAsientoAsync(int asientoId, CancellationToken ct = default);
 
     Task<List<AsientoContable>> ListByPeriodoAsync(int anio, int mes, CancellationToken ct = default);
-    Task<List<AsientoContable>> ListAsync(int? anio, int? mes, CancellationToken ct = default);
+    Task<List<AsientoContable>> ListAsync(
+        int? anio, int? mes, EstadoFilter filter = EstadoFilter.Activos, CancellationToken ct = default);
     Task<AsientoContable?> GetByIdAsync(int id, CancellationToken ct = default);
     Task AddAsync(AsientoContable entity, CancellationToken ct = default);
 

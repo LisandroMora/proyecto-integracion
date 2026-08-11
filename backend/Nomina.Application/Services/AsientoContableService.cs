@@ -1,3 +1,4 @@
+using Nomina.Application.Common;
 using Nomina.Application.DTOs;
 using Nomina.Application.Exceptions;
 using Nomina.Application.Interfaces;
@@ -307,12 +308,13 @@ public class AsientoContableService : IAsientoContableService
         return new ReaperturaDto(asiento.Id, transacciones.Count);
     }
 
-    public async Task<List<AsientoContableDto>> ListAsync(int? anio, int? mes, CancellationToken ct = default)
+    public async Task<List<AsientoContableDto>> ListAsync(
+        int? anio, int? mes, EstadoFilter filter = EstadoFilter.Activos, CancellationToken ct = default)
     {
         if (mes is int m && (m < 1 || m > 12))
             throw new DomainValidationException("El mes debe estar entre 1 y 12.");
 
-        var items = await _repo.ListAsync(anio, mes, ct);
+        var items = await _repo.ListAsync(anio, mes, filter, ct);
         return items.Select(Map).ToList();
     }
 

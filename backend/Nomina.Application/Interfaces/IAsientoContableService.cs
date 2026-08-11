@@ -1,3 +1,4 @@
+using Nomina.Application.Common;
 using Nomina.Application.DTOs;
 
 namespace Nomina.Application.Interfaces;
@@ -28,5 +29,6 @@ public interface IAsientoContableService
     /// </summary>
     Task<ReaperturaDto?> ReabrirAsync(int id, CancellationToken ct = default);
 
-    Task<List<AsientoContableDto>> ListAsync(int? anio, int? mes, CancellationToken ct = default);
+    Task<List<AsientoContableDto>> ListAsync(
+        int? anio, int? mes, EstadoFilter filter = EstadoFilter.Activos, CancellationToken ct = default);
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nomina.Application.Common;
 using Nomina.Application.DTOs;
 using Nomina.Application.Interfaces;
 
@@ -13,13 +14,17 @@ public class AsientosContablesController : ControllerBase
     private readonly IAsientoContableService _service;
     public AsientosContablesController(IAsientoContableService service) => _service = service;
 
-    /// <summary>Historial de asientos generados, filtrable por período.</summary>
+    /// <summary>
+    /// Historial de asientos generados, filtrable por período. Los reabiertos quedan
+    /// inactivos, así que no salen salvo que se pidan explícitamente.
+    /// </summary>
     [HttpGet]
     public Task<List<AsientoContableDto>> List(
         [FromQuery] int? anio,
         [FromQuery] int? mes,
+        [FromQuery] EstadoFilter estado = EstadoFilter.Activos,
         CancellationToken ct = default) =>
-        _service.ListAsync(anio, mes, ct);
+        _service.ListAsync(anio, mes, estado, ct);
 
     /// <summary>Qué se enviaría para el período. No persiste ni envía nada.</summary>
     [HttpGet("preview")]

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nomina.Application.Common;
 using Nomina.Application.Interfaces;
 using Nomina.Domain.Entities;
 using Nomina.Domain.Enums;
@@ -35,9 +36,19 @@ public class AsientoContableRepository : IAsientoContableRepository
             .Where(a => a.Anio == anio && a.Mes == mes)
             .ToListAsync(ct);
 
-    public Task<List<AsientoContable>> ListAsync(int? anio, int? mes, CancellationToken ct = default)
+    public Task<List<AsientoContable>> ListAsync(
+        int? anio, int? mes, EstadoFilter filter = EstadoFilter.Activos, CancellationToken ct = default)
     {
         IQueryable<AsientoContable> q = _db.AsientosContables.Include(a => a.Detalles);
+
+        // Un asiento reabierto queda inactivo: sigue en la base como evidencia del
+        // envío perdido, pero por defecto no se lista.
+        q = filter switch
+        {
+            EstadoFilter.Activos => q.Where(a => a.Estado == EstadoRegistro.Activo),
+            EstadoFilter.Inactivos => q.Where(a => a.Estado == EstadoRegistro.Inactivo),
+            _ => q
+        };
 
         if (anio is int a1) q = q.Where(a => a.Anio == a1);
         if (mes is int m1) q = q.Where(a => a.Mes == m1);
