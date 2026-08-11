@@ -319,20 +319,6 @@ export default function TransaccionesPage() {
     );
   }, [rows, query]);
 
-  const totales = useMemo(() => {
-    let ingresosTotal = 0;
-    let deduccionesTotal = 0;
-    for (const r of filtered) {
-      if (r.tipoTransaccion === 1) ingresosTotal += r.monto;
-      else deduccionesTotal += r.monto;
-    }
-    return {
-      ingresos: ingresosTotal,
-      deducciones: deduccionesTotal,
-      neto: ingresosTotal - deduccionesTotal,
-    };
-  }, [filtered]);
-
   const columns: Column<TransaccionRead>[] = [
     {
       header: "Fecha",
@@ -629,34 +615,6 @@ export default function TransaccionesPage() {
           );
         }}
       />
-
-      {filtered.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-md border border-slate-800 bg-slate-900 px-4 py-3">
-            <div className="text-xs text-slate-400">Total ingresos</div>
-            <div className="mt-1 text-lg font-semibold tabular-nums text-emerald-300">
-              {currency.format(totales.ingresos)}
-            </div>
-          </div>
-          <div className="rounded-md border border-slate-800 bg-slate-900 px-4 py-3">
-            <div className="text-xs text-slate-400">Total deducciones</div>
-            <div className="mt-1 text-lg font-semibold tabular-nums text-rose-300">
-              {currency.format(totales.deducciones)}
-            </div>
-          </div>
-          <div className="rounded-md border border-slate-800 bg-slate-900 px-4 py-3">
-            <div className="text-xs text-slate-400">Neto</div>
-            <div
-              className={
-                "mt-1 text-lg font-semibold tabular-nums " +
-                (totales.neto < 0 ? "text-rose-300" : "text-slate-100")
-              }
-            >
-              {currency.format(totales.neto)}
-            </div>
-          </div>
-        </div>
-      )}
 
       <Modal
         open={modalOpen}
