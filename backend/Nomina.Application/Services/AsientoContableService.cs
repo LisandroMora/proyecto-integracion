@@ -68,7 +68,7 @@ public class AsientoContableService : IAsientoContableService
         {
             var nombre = NombreConcepto(grupo.Tipo, grupo.ConceptoId, ingresos, deducciones);
             var complementario = HayEnvioPrevio(existentes, grupo.Tipo, grupo.ConceptoId);
-            var cuentas = await _contabilidad.ResolverCuentasAsync(grupo.Tipo, ct);
+            var cuentas = await _contabilidad.ResolverCuentasAsync(ct);
 
             // Un intento anterior que quedó fallido se reutiliza en vez de acumular
             // registros muertos. Sus transacciones siguen sin marcar, así que el
@@ -160,7 +160,7 @@ public class AsientoContableService : IAsientoContableService
             throw new DomainValidationException(
                 "El concepto ya no tiene transacciones pendientes de contabilizar.");
 
-        var cuentas = await _contabilidad.ResolverCuentasAsync(asiento.TipoTransaccion, ct);
+        var cuentas = await _contabilidad.ResolverCuentasAsync(ct);
 
         asiento.Monto = grupo.Monto;
         asiento.CantidadTransacciones = grupo.Transacciones.Count;

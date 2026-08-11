@@ -35,19 +35,15 @@ internal class ContabilidadHttpClient : IContabilidadClient
         _logger = logger;
     }
 
-    public async Task<CuentasAsiento> ResolverCuentasAsync(TipoTransaccion tipo, CancellationToken ct = default)
+    public async Task<CuentasAsiento> ResolverCuentasAsync(CancellationToken ct = default)
     {
         var c = _settings.Cuentas;
 
-        // Opción acordada con Contabilidad mientras no exista una cuenta de
-        // retenciones propia:
-        //   Ingreso   -> DB Gasto de Nómina      / CR Nómina por Pagar
-        //   Deducción -> DB Nómina por Pagar     / CR Cuentas por Pagar
-        // La deducción no es gasto de la empresa: reduce el neto a pagar al
-        // empleado y crea una obligación con un tercero.
-        var (codigoDebito, codigoCredito) = tipo == TipoTransaccion.Ingreso
-            ? (c.GastoNomina, c.NominaPorPagar)
-            : (c.NominaPorPagar, c.RetencionesPorPagar);
+        // Todo asiento de nómina va DB Gasto de Nómina / CR Nómina por Pagar, sin
+        // distinguir ingreso de deducción: se acordó usar solo las dos cuentas de
+        // nómina. Como consecuencia, una deducción suma en lugar de restar, así que
+        // Nómina por Pagar acumula el bruto y no el neto a pagar al empleado.
+        var (codigoDebito, codigoCredito) = (c.GastoNomina, c.NominaPorPagar);
 
         var catalogo = await ObtenerCatalogoAsync(false, ct);
 

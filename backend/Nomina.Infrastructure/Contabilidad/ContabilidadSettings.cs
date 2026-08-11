@@ -30,16 +30,10 @@ public class ContabilidadSettings
     /// </summary>
     public class CuentasSettings
     {
-        /// <summary>Gasto de Nómina. Débito de los ingresos.</summary>
+        /// <summary>Gasto de Nómina. Débito de todo asiento de nómina.</summary>
         public string GastoNomina { get; set; } = "501";
 
-        /// <summary>Nómina por Pagar. Crédito de los ingresos y débito de las deducciones.</summary>
+        /// <summary>Nómina por Pagar. Crédito de todo asiento de nómina.</summary>
         public string NominaPorPagar { get; set; } = "202";
-
-        /// <summary>
-        /// Cuentas por Pagar. Crédito de las deducciones: la retención al empleado
-        /// se convierte en una deuda con un tercero (AFP, DGII).
-        /// </summary>
-        public string RetencionesPorPagar { get; set; } = "201";
     }
 }

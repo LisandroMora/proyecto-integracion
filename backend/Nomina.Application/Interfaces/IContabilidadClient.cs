@@ -39,10 +39,10 @@ public record EntradaContabilidad(
 public interface IContabilidadClient
 {
     /// <summary>
-    /// Determina qué cuentas usar según la naturaleza del concepto, resolviendo el
-    /// código configurado contra el catálogo de Contabilidad.
+    /// Par de cuentas de todo asiento de nómina, resolviendo los códigos
+    /// configurados contra el catálogo de Contabilidad.
     /// </summary>
-    Task<CuentasAsiento> ResolverCuentasAsync(TipoTransaccion tipo, CancellationToken ct = default);
+    Task<CuentasAsiento> ResolverCuentasAsync(CancellationToken ct = default);
 
     Task<AsientoRegistradoResponse> RegistrarAsientoAsync(
         int cuentaDebitoId,
