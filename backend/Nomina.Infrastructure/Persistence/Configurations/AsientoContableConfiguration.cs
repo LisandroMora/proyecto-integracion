@@ -17,9 +17,12 @@ public class AsientoContableConfiguration : IEntityTypeConfiguration<AsientoCont
         builder.Property(x => x.FechaAsiento).HasColumnType("datetime2");
         builder.Property(x => x.FechaEnvio).HasColumnType("datetime2");
         builder.Property(x => x.MensajeError).HasMaxLength(1000);
+        builder.Property(x => x.FechaVerificacion).HasColumnType("datetime2");
+        builder.Property(x => x.MensajeVerificacion).HasMaxLength(1000);
         builder.Property(x => x.TipoTransaccion).HasConversion<int>();
         builder.Property(x => x.Estado).HasConversion<int>();
         builder.Property(x => x.EstadoEnvio).HasConversion<int>();
+        builder.Property(x => x.EstadoVerificacion).HasConversion<int>();
 
         builder.HasMany(x => x.Detalles)
             .WithOne(d => d.AsientoContable)

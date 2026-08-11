@@ -42,4 +42,25 @@ public class AsientosContablesController : ControllerBase
         var result = await _service.ReintentarAsync(id, ct);
         return result is null ? NotFound() : Ok(result);
     }
+
+    /// <summary>
+    /// Cruza los asientos enviados del período contra lo que Contabilidad tiene hoy.
+    /// No reenvía ni modifica transacciones.
+    /// </summary>
+    [HttpPost("verificar")]
+    public Task<VerificacionPeriodoDto> Verificar(
+        [FromBody] PeriodoRequest request,
+        CancellationToken ct = default) =>
+        _service.VerificarPeriodoAsync(request.Anio, request.Mes, ct);
+
+    /// <summary>
+    /// Devuelve a pendientes las transacciones de un asiento que Contabilidad ya no
+    /// tiene, para que entren en el próximo cierre.
+    /// </summary>
+    [HttpPost("{id:int}/reabrir")]
+    public async Task<ActionResult<ReaperturaDto>> Reabrir(int id, CancellationToken ct)
+    {
+        var result = await _service.ReabrirAsync(id, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
 }

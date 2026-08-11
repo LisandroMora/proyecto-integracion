@@ -10,6 +10,8 @@ import { useToast } from "@/components/Toast";
 type TipoTransaccion = 1 | 2; // 1 = Ingreso, 2 = Deduccion
 type TipoMovimiento = 1 | 2; // 1 = Debito, 2 = Credito
 type EstadoEnvio = 0 | 1 | 2; // Pendiente | Enviado | Fallido
+type EstadoVerificacion = 0 | 1 | 2 | 3; // NoVerificado | Confirmado | NoEncontrado | Divergente
+type EstadoRegistro = 0 | 1; // Inactivo (reabierto) | Activo
 
 type AsientoPreview = {
   tipoTransaccion: TipoTransaccion;
@@ -40,12 +42,33 @@ type Asiento = {
   monto: number;
   fechaAsiento: string;
   cantidadTransacciones: number;
+  estado: EstadoRegistro;
   estadoEnvio: EstadoEnvio;
   numeroAsiento: number | null;
   fechaEnvio: string | null;
   mensajeError: string | null;
+  estadoVerificacion: EstadoVerificacion;
+  fechaVerificacion: string | null;
+  mensajeVerificacion: string | null;
   detalles: AsientoDetalle[];
 };
+
+/** Asiento que Contabilidad tiene del período sin respaldo nuestro. */
+type EntradaHuerfana = {
+  numeroAsiento: number | null;
+  descripcion: string;
+  monto: number;
+  estado: string;
+};
+
+type VerificacionPeriodo = {
+  confirmados: number;
+  noEncontrados: number;
+  divergentes: number;
+  huerfanas: EntradaHuerfana[];
+};
+
+type Reapertura = { asientoId: number; transaccionesReabiertas: number };
 
 const currency = new Intl.NumberFormat("es-DO", {
   style: "currency",
@@ -65,6 +88,25 @@ function EstadoEnvioBadge({ estado }: { estado: EstadoEnvio | null }) {
     "0": { label: "Pendiente", cls: "bg-slate-800 text-slate-300 ring-slate-700" },
     "1": { label: "Enviado", cls: "bg-emerald-950/60 text-emerald-300 ring-emerald-900" },
     "2": { label: "Fallido", cls: "bg-rose-950/60 text-rose-300 ring-rose-900" },
+  };
+  const it = map[String(estado ?? 0)];
+  return (
+    <span
+      className={
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset " + it.cls
+      }
+    >
+      {it.label}
+    </span>
+  );
+}
+
+function VerificacionBadge({ estado }: { estado: EstadoVerificacion }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    "0": { label: "Sin verificar", cls: "bg-slate-800 text-slate-400 ring-slate-700" },
+    "1": { label: "Confirmado", cls: "bg-emerald-950/60 text-emerald-300 ring-emerald-900" },
+    "2": { label: "No encontrado", cls: "bg-rose-950/60 text-rose-300 ring-rose-900" },
+    "3": { label: "Divergente", cls: "bg-amber-950/60 text-amber-300 ring-amber-900" },
   };
   const it = map[String(estado ?? 0)];
   return (
@@ -100,12 +142,18 @@ export default function CierreContablePage() {
 
   const [preview, setPreview] = useState<AsientoPreview[]>([]);
   const [historial, setHistorial] = useState<Asiento[]>([]);
+  const [huerfanas, setHuerfanas] = useState<EntradaHuerfana[]>([]);
   const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [verificando, setVerificando] = useState(false);
   const [reintentandoId, setReintentandoId] = useState<number | null>(null);
+  const [reabriendoId, setReabriendoId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    // Las huérfanas salen de la verificación, no del período: al recargar dejan
+    // de ser válidas hasta que se vuelva a verificar.
+    setHuerfanas([]);
     try {
       const [p, h] = await Promise.all([
         api<AsientoPreview[]>(`/api/asientos-contables/preview?anio=${anio}&mes=${mes}`),
@@ -162,6 +210,58 @@ export default function CierreContablePage() {
       toast.error(err instanceof ApiError ? err.message : "No se pudo completar el envío.");
     } finally {
       setEnviando(false);
+    }
+  }
+
+  async function verificar() {
+    setVerificando(true);
+    try {
+      const r = await api<VerificacionPeriodo>("/api/asientos-contables/verificar", {
+        method: "POST",
+        body: { anio, mes },
+      });
+
+      // load() limpia las huérfanas, así que se asignan después de recargar.
+      await load();
+      setHuerfanas(r.huerfanas);
+
+      const problemas = r.noEncontrados + r.divergentes;
+      if (r.confirmados === 0 && problemas === 0) {
+        toast.success("Este período no tiene asientos enviados que verificar.");
+      } else if (problemas === 0) {
+        toast.success(`${r.confirmados} asiento(s) confirmados en Contabilidad.`);
+      } else {
+        toast.error(
+          `${r.confirmados} confirmado(s) · ${r.noEncontrados} no encontrado(s) · ` +
+            `${r.divergentes} divergente(s).`
+        );
+      }
+    } catch (err) {
+      // Un fallo de red no marca nada: no saber si está no es lo mismo que no esté.
+      toast.error(
+        err instanceof ApiError ? err.message : "No se pudo verificar contra Contabilidad."
+      );
+    } finally {
+      setVerificando(false);
+    }
+  }
+
+  async function reabrir(id: number) {
+    const msg =
+      "Se dará de baja este asiento y sus transacciones volverán a quedar pendientes " +
+      "de contabilizar, para incluirlas en un próximo envío. Hazlo solo si Contabilidad " +
+      "realmente no lo tiene. ¿Continuar?";
+    if (!window.confirm(msg)) return;
+
+    setReabriendoId(id);
+    try {
+      const r = await api<Reapertura>(`/api/asientos-contables/${id}/reabrir`, { method: "POST" });
+      toast.success(`${r.transaccionesReabiertas} transacción(es) volvieron a pendientes.`);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo reabrir el asiento.");
+    } finally {
+      setReabriendoId(null);
     }
   }
 
@@ -263,6 +363,23 @@ export default function CierreContablePage() {
       ),
       className: "w-56",
     },
+    {
+      header: "Verificación",
+      cell: (r) => (
+        <div className="space-y-1">
+          <VerificacionBadge estado={r.estadoVerificacion} />
+          {r.estado === 0 && (
+            <div className="text-xs text-slate-400">
+              Reabierto · sus transacciones volvieron a pendientes
+            </div>
+          )}
+          {r.mensajeVerificacion && (
+            <div className="text-xs text-slate-400 max-w-xs">{r.mensajeVerificacion}</div>
+          )}
+        </div>
+      ),
+      className: "w-64",
+    },
   ];
 
   return (
@@ -309,6 +426,14 @@ export default function CierreContablePage() {
           </div>
 
           <div className="flex-1" />
+
+          <button
+            onClick={() => void verificar()}
+            disabled={verificando || enviando || loading}
+            className="rounded border border-slate-700 bg-slate-900 text-sm text-slate-300 px-4 py-2 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {verificando ? <Spinner size="sm" label="Verificando…" /> : "Verificar en Contabilidad"}
+          </button>
 
           <button
             onClick={() => void enviar()}
@@ -377,21 +502,67 @@ export default function CierreContablePage() {
           rows={historial}
           rowKey={(r) => r.id}
           emptyLabel={loading ? <Spinner label="Cargando…" /> : "Aún no se ha enviado nada de este período."}
-          actions={(row) =>
-            row.estadoEnvio === 1 ? (
-              <span className="text-xs text-slate-500">—</span>
-            ) : (
-              <button
-                onClick={() => void reintentar(row.id)}
-                disabled={reintentandoId === row.id}
-                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40 transition-colors"
-              >
-                {reintentandoId === row.id ? <Spinner size="sm" label="…" /> : "Reintentar"}
-              </button>
-            )
-          }
+          actions={(row) => {
+            if (row.estado === 0) return <span className="text-xs text-slate-500">—</span>;
+
+            if (row.estadoEnvio !== 1) {
+              return (
+                <button
+                  onClick={() => void reintentar(row.id)}
+                  disabled={reintentandoId === row.id}
+                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40 transition-colors"
+                >
+                  {reintentandoId === row.id ? <Spinner size="sm" label="…" /> : "Reintentar"}
+                </button>
+              );
+            }
+
+            // Reabrir solo aparece sobre lo que la verificación no encontró: es la
+            // única evidencia de que reenviarlo no va a duplicar el asiento.
+            if (row.estadoVerificacion === 2) {
+              return (
+                <button
+                  onClick={() => void reabrir(row.id)}
+                  disabled={reabriendoId === row.id}
+                  className="rounded border border-rose-900 bg-rose-950/40 px-2 py-1 text-xs text-rose-300 hover:bg-rose-950 hover:text-rose-200 disabled:opacity-40 transition-colors"
+                >
+                  {reabriendoId === row.id ? <Spinner size="sm" label="…" /> : "Reabrir"}
+                </button>
+              );
+            }
+
+            return <span className="text-xs text-slate-500">—</span>;
+          }}
         />
       </section>
+
+      {huerfanas.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-medium text-amber-300">
+            En Contabilidad sin respaldo nuestro
+          </h2>
+          <p className="text-xs text-slate-500">
+            Asientos de este período que Contabilidad tiene bajo nuestro auxiliar y que no
+            corresponden a ninguno de los nuestros. Suele significar que un envío se registró
+            dos veces; hay que corregirlo del lado de ellos.
+          </p>
+          <div className="rounded-md border border-amber-900/60 bg-amber-950/20 divide-y divide-amber-900/40">
+            {huerfanas.map((h, i) => (
+              <div
+                key={`${h.numeroAsiento ?? "s/n"}-${i}`}
+                className="flex items-center justify-between gap-4 px-4 py-2 text-sm"
+              >
+                <span className="font-mono text-xs text-amber-300">
+                  {h.numeroAsiento === null ? "s/n" : `#${h.numeroAsiento}`}
+                </span>
+                <span className="flex-1 text-slate-300">{h.descripcion}</span>
+                <span className="text-xs text-slate-500">{h.estado}</span>
+                <span className="tabular-nums text-slate-100">{currency.format(h.monto)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

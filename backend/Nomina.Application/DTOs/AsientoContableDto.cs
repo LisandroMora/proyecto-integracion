@@ -25,6 +25,9 @@ public record AsientoContableDto(
     int? NumeroAsiento,
     DateTime? FechaEnvio,
     string? MensajeError,
+    EstadoVerificacionAsiento EstadoVerificacion,
+    DateTime? FechaVerificacion,
+    string? MensajeVerificacion,
     List<AsientoContableDetalleDto> Detalles);
 
 /// <summary>
@@ -44,3 +47,37 @@ public record AsientoPreviewDto(
     string? MensajeError);
 
 public record PeriodoRequest(int Anio, int Mes);
+
+/// <summary>Cómo quedó un asiento nuestro al cruzarlo contra Contabilidad.</summary>
+public record VerificacionAsientoDto(
+    int AsientoId,
+    string ConceptoNombre,
+    string Descripcion,
+    decimal MontoLocal,
+    /// <summary>Monto que tiene Contabilidad; null si no lo encontró.</summary>
+    decimal? MontoContabilidad,
+    int? NumeroAsiento,
+    EstadoVerificacionAsiento EstadoVerificacion,
+    string? Mensaje);
+
+/// <summary>
+/// Asiento del período que Contabilidad tiene bajo nuestro auxiliar y que no
+/// corresponde a ninguno de los nuestros. Casi siempre es un envío duplicado.
+/// </summary>
+public record EntradaHuerfanaDto(
+    int? NumeroAsiento,
+    string Descripcion,
+    decimal Monto,
+    string Estado);
+
+public record VerificacionPeriodoDto(
+    int Anio,
+    int Mes,
+    int Confirmados,
+    int NoEncontrados,
+    int Divergentes,
+    List<VerificacionAsientoDto> Asientos,
+    List<EntradaHuerfanaDto> Huerfanas);
+
+/// <summary>Resultado de devolver a pendientes las transacciones de un asiento perdido.</summary>
+public record ReaperturaDto(int AsientoId, int TransaccionesReabiertas);

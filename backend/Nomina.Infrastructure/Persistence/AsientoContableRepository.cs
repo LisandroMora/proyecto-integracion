@@ -24,6 +24,11 @@ public class AsientoContableRepository : IAsientoContableRepository
             .ToListAsync(ct);
     }
 
+    public Task<List<Transaccion>> GetTransaccionesByAsientoAsync(int asientoId, CancellationToken ct = default) =>
+        _db.Transacciones
+            .Where(t => t.AsientoContableId == asientoId)
+            .ToListAsync(ct);
+
     public Task<List<AsientoContable>> ListByPeriodoAsync(int anio, int mes, CancellationToken ct = default) =>
         _db.AsientosContables
             .Include(a => a.Detalles)

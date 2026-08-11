@@ -188,6 +188,125 @@ public class AsientoContableService : IAsientoContableService
         return Map(asiento);
     }
 
+    public async Task<VerificacionPeriodoDto> VerificarPeriodoAsync(
+        int anio, int mes, CancellationToken ct = default)
+    {
+        ValidarPeriodo(anio, mes);
+
+        // Si la consulta falla, la excepción sube tal cual y no se marca nada.
+        // "No pude preguntar" no es "no está": confundirlos llevaría a reabrir y
+        // reenviar asientos que sí existen, y Contabilidad no rechaza duplicados.
+        var remotas = await _contabilidad.ConsultarEntradasAsync(ct);
+
+        var locales = (await _repo.ListByPeriodoAsync(anio, mes, ct))
+            .Where(a => a.Estado == EstadoRegistro.Activo && a.EstadoEnvio == EstadoEnvioAsiento.Enviado)
+            .OrderBy(a => a.Id)
+            .ToList();
+
+        // Su API no filtra por período, pero nuestra descripción lo lleva dentro,
+        // así que sirve para quedarnos solo con lo de este cierre.
+        var prefijo = PrefijoPeriodo(anio, mes);
+        var disponibles = remotas
+            .Where(e => e.Descripcion.StartsWith(prefijo, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var ahora = DateTime.UtcNow;
+        var resultados = new List<VerificacionAsientoDto>();
+
+        foreach (var asiento in locales)
+        {
+            // Emparejamiento uno a uno: dos asientos complementarios del mismo
+            // concepto comparten descripción, y cada uno tiene que casar con una
+            // entrada distinta para que el segundo no confirme con la del primero.
+            var homonimas = disponibles
+                .Where(e => string.Equals(e.Descripcion, asiento.Descripcion, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var exacta = homonimas.FirstOrDefault(e => e.EstaActiva && e.Monto == asiento.Monto);
+            if (exacta is not null)
+            {
+                disponibles.Remove(exacta);
+
+                // El número se refresca: si su base se reinició, el que guardamos
+                // al enviar ya no apunta a este asiento.
+                asiento.NumeroAsiento = exacta.NumeroAsiento ?? asiento.NumeroAsiento;
+                Marcar(asiento, EstadoVerificacionAsiento.Confirmado, null, ahora);
+                resultados.Add(Resultado(asiento, exacta.Monto));
+                continue;
+            }
+
+            var otroMonto = homonimas.FirstOrDefault(e => e.EstaActiva);
+            if (otroMonto is not null)
+            {
+                disponibles.Remove(otroMonto);
+                Marcar(asiento, EstadoVerificacionAsiento.Divergente,
+                    $"Contabilidad lo tiene por {otroMonto.Monto:N2} y nosotros por {asiento.Monto:N2}.",
+                    ahora);
+                resultados.Add(Resultado(asiento, otroMonto.Monto));
+                continue;
+            }
+
+            var anulada = homonimas.FirstOrDefault();
+            if (anulada is not null)
+            {
+                disponibles.Remove(anulada);
+                Marcar(asiento, EstadoVerificacionAsiento.NoEncontrado,
+                    $"Contabilidad lo tiene en estado {anulada.Estado}.", ahora);
+                resultados.Add(Resultado(asiento, anulada.Monto));
+                continue;
+            }
+
+            Marcar(asiento, EstadoVerificacionAsiento.NoEncontrado,
+                "Contabilidad no tiene ningún asiento con esta descripción.", ahora);
+            resultados.Add(Resultado(asiento, null));
+        }
+
+        await _repo.SaveChangesAsync(ct);
+
+        // Lo que sobra del período está en Contabilidad sin respaldo nuestro:
+        // típicamente un envío que se duplicó. Se informa, no se toca.
+        var huerfanas = disponibles
+            .Select(e => new EntradaHuerfanaDto(e.NumeroAsiento, e.Descripcion, e.Monto, e.Estado))
+            .ToList();
+
+        return new VerificacionPeriodoDto(
+            anio,
+            mes,
+            resultados.Count(r => r.EstadoVerificacion == EstadoVerificacionAsiento.Confirmado),
+            resultados.Count(r => r.EstadoVerificacion == EstadoVerificacionAsiento.NoEncontrado),
+            resultados.Count(r => r.EstadoVerificacion == EstadoVerificacionAsiento.Divergente),
+            resultados,
+            huerfanas);
+    }
+
+    public async Task<ReaperturaDto?> ReabrirAsync(int id, CancellationToken ct = default)
+    {
+        var asiento = await _repo.GetByIdAsync(id, ct);
+        if (asiento is null) return null;
+
+        if (asiento.Estado != EstadoRegistro.Activo)
+            throw new DomainValidationException("El asiento ya fue reabierto.");
+
+        // Se exige la verificación previa a propósito: reabrir sin evidencia de que
+        // Contabilidad no lo tiene es la vía directa a contabilizar dos veces lo mismo.
+        if (asiento.EstadoVerificacion != EstadoVerificacionAsiento.NoEncontrado)
+            throw new DomainValidationException(
+                "Solo se puede reabrir un asiento que la verificación marcó como no encontrado " +
+                "en Contabilidad. Verifique el período primero.");
+
+        var transacciones = await _repo.GetTransaccionesByAsientoAsync(asiento.Id, ct);
+        foreach (var t in transacciones)
+            t.AsientoContableId = null;
+
+        // Baja lógica: queda como evidencia de que se envió y se perdió, pero deja
+        // de contar como envío previo, así que el próximo cierre vuelve a tomar
+        // estas transacciones y genera un asiento nuevo.
+        asiento.Estado = EstadoRegistro.Inactivo;
+
+        await _repo.SaveChangesAsync(ct);
+        return new ReaperturaDto(asiento.Id, transacciones.Count);
+    }
+
     public async Task<List<AsientoContableDto>> ListAsync(int? anio, int? mes, CancellationToken ct = default)
     {
         if (mes is int m && (m < 1 || m > 12))
@@ -228,8 +347,34 @@ public class AsientoContableService : IAsientoContableService
     {
         var etiqueta = tipo == TipoTransaccion.Ingreso ? "Ingreso" : "Deducción";
         var sufijo = complementario ? " (complementario)" : string.Empty;
-        return $"Nómina {anio:D4}-{mes:D2} · {etiqueta}: {concepto}{sufijo}";
+        return $"{PrefijoPeriodo(anio, mes)} {etiqueta}: {concepto}{sufijo}";
     }
+
+    /// <summary>
+    /// La descripción es lo único que nos permite reconocer un asiento nuestro del
+    /// lado de Contabilidad: su API no filtra por período y el número que devuelve
+    /// se recicla cuando su base se reinicia. Si cambia este formato, la
+    /// verificación deja de encontrar los asientos enviados con el formato viejo.
+    /// </summary>
+    private static string PrefijoPeriodo(int anio, int mes) => $"Nómina {anio:D4}-{mes:D2} ·";
+
+    private static void Marcar(
+        AsientoContable asiento, EstadoVerificacionAsiento estado, string? mensaje, DateTime cuando)
+    {
+        asiento.EstadoVerificacion = estado;
+        asiento.MensajeVerificacion = mensaje;
+        asiento.FechaVerificacion = cuando;
+    }
+
+    private static VerificacionAsientoDto Resultado(AsientoContable a, decimal? montoContabilidad) => new(
+        a.Id,
+        a.ConceptoNombre,
+        a.Descripcion,
+        a.Monto,
+        montoContabilidad,
+        a.NumeroAsiento,
+        a.EstadoVerificacion,
+        a.MensajeVerificacion);
 
     /// <summary>Un concepto del período con sus transacciones aún no contabilizadas.</summary>
     private sealed record GrupoConcepto(
@@ -288,6 +433,9 @@ public class AsientoContableService : IAsientoContableService
         a.NumeroAsiento,
         a.FechaEnvio,
         a.MensajeError,
+        a.EstadoVerificacion,
+        a.FechaVerificacion,
+        a.MensajeVerificacion,
         a.Detalles
             .OrderBy(d => d.TipoMovimiento)
             .Select(d => new AsientoContableDetalleDto(

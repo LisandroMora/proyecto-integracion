@@ -37,6 +37,13 @@ public class AsientoContable
     public DateTime? FechaEnvio { get; set; }
     public string? MensajeError { get; set; }
 
+    public EstadoVerificacionAsiento EstadoVerificacion { get; set; } = EstadoVerificacionAsiento.NoVerificado;
+
+    public DateTime? FechaVerificacion { get; set; }
+
+    /// <summary>Detalle del último cruce: por qué no se encontró o en qué diverge.</summary>
+    public string? MensajeVerificacion { get; set; }
+
     public ICollection<AsientoContableDetalle> Detalles { get; set; } = new List<AsientoContableDetalle>();
 
     /// <summary>Transacciones que componen el monto. Permite llegar al empleado desde el asiento.</summary>

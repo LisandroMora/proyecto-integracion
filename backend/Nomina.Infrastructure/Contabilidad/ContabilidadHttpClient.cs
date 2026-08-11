@@ -111,6 +111,50 @@ internal class ContabilidadHttpClient : IContabilidadClient
             dto.Mensaje ?? string.Empty);
     }
 
+    public async Task<List<EntradaContabilidad>> ConsultarEntradasAsync(CancellationToken ct = default)
+    {
+        // auxiliarId es el único parámetro que su API interpreta: el resto
+        // (numeroAsiento, fecha, estado…) los ignora en silencio y devuelve todo.
+        // Filtrar por el nuestro deja fuera Facturación, CxC y CxP.
+        List<EntradaLinea>? lineas;
+        try
+        {
+            lineas = await _http.GetFromJsonAsync<List<EntradaLinea>>(
+                $"/api/entradas?auxiliarId={_settings.AuxiliarId}", JsonOpts, ct);
+        }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new DomainValidationException(
+                "El Sistema de Contabilidad no respondió al consultar los asientos registrados.", 504);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Fallo de red al consultar las entradas de Contabilidad.");
+            throw new DomainValidationException(
+                $"No se pudieron consultar los asientos de Contabilidad: {ex.Message}", 502);
+        }
+
+        if (lineas is null) return [];
+
+        // Cada asiento llega partido en líneas, una por movimiento. El monto es la
+        // suma de los débitos, que por partida doble iguala la de los créditos. Una
+        // línea sin número no se puede agrupar con nadie, así que va sola.
+        return lineas
+            .GroupBy(l => l.NumeroAsiento is int n ? $"asiento-{n}" : $"linea-{l.Id}")
+            .Select(g =>
+            {
+                var primera = g.First();
+                var debitos = g.Sum(l => l.Debito);
+                return new EntradaContabilidad(
+                    primera.NumeroAsiento,
+                    primera.Descripcion ?? string.Empty,
+                    debitos > 0 ? debitos : g.Sum(l => l.Credito),
+                    primera.Fecha,
+                    primera.Estado ?? string.Empty);
+            })
+            .ToList();
+    }
+
     private async Task<HttpResponseMessage> EnviarConReintentosAsync(EntradaRequest payload, CancellationToken ct)
     {
         var intentos = Math.Max(1, _settings.ReintentosEnvio);
@@ -212,6 +256,18 @@ internal class ContabilidadHttpClient : IContabilidadClient
         decimal Monto,
         string? Estado,
         string? Mensaje);
+
+    /// <summary>Una línea de GET /api/entradas: un solo movimiento del asiento.</summary>
+    private record EntradaLinea(
+        int Id,
+        int? NumeroAsiento,
+        DateTime? Fecha,
+        string? Descripcion,
+        string? Cuenta,
+        string? Auxiliar,
+        decimal Debito,
+        decimal Credito,
+        string? Estado);
 
     private record EntradaErrorResponse(
         [property: JsonPropertyName("status")] int Status,
